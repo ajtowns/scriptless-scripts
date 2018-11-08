@@ -1,0 +1,50 @@
+@startuml
+title Multi-Hop-Locks with Schnorr
+participant Alice
+participant Bob
+participant Carol
+participant Dave
+
+    note over Bob,Carol
+        Definitions
+        Incomplete 2-of-2 MuSig from user i over m: sig(i,m,T) := k + H(R+T,m)*xi
+        adaptor_sig(i,m,T) := sig(i,m,t*G) + t
+        Combine incomplete signatures from i and j combine: sig(m,T) = sig(i,m,T) + adaptor_sig(j,m,T)
+        <=> adaptor_sig(j,m,T) = sig(m,T) - sig(i,m,T)
+    end note
+
+== Setup ==
+    Alice->Alice : draw y0, y1, y2 at random
+    note left
+        Alice sets up tuple (L,y,R) for every user with
+        left (L) and right (R) lock and where R - L = y*G
+    end note
+    Alice->Alice: ..., y0, y0*G
+    Alice->Bob  : y0*G, y1, (y0+y1)*G
+    Alice->Carol: (y0+y1)*G, y2, (y0+y1+y2)*G
+    Alice->Dave : (y0+y1+y2)*G, y0+y1+y2, ...
+    note over Bob,Carol
+        Invariant
+        User i>0,i<n-1 gives sig(i,tx_i+1,T) to user i+1 only if have
+        sig(i-1,txi,T-yi*G) from user i-1 AND sig(i+1,tx_i+1,T) from user i+1.
+        User i = 0 gives sig(0,tx_1,T) to user 1 if have sig(1,tx_1,T) from
+        user 1
+    end note
+
+== Tx update ==
+Carol->Dave : add MuSig output w. timelocked refund
+Dave->Carol : txD, sig(D,txD,(y0+y1+y2)*G)
+Bob->Carol : add MuSig output w. timelocked refund
+Carol->Bob : txC, sig(C,txC,(y0+y1)*G)
+Alice->Bob : add MuSig output w. timelocked refund
+Bob->Alice : txB, sig(B,txB,y0*G)
+Alice->Bob : sig(A,txB,y0*G)
+Bob->Carol : sig(B,txC,(y0+y1)*G)
+Carol->Dave : sig(C,txD,(y0+y1+y2)*G)
+
+== Settlement ==
+Dave->Dave : create adaptor_sig(D,txD,y0+y1+y2),\nMuSig combine with sig(C,txD,(y0+y1+y2)*G),\nspend output
+Carol->Carol : compute y0+y1 = adaptor_sig(D,txD,y0+y1+y2) - sig(D,txD,(y0+y1+y2)*G) - y2\nto create adaptor_sig(C,txC,y0+y1),\nMuSig combine with sig(B,txC,(y0+y1)*G),\nspend output
+Bob->Bob : compute y0 = adaptor_sig(C,txC,y0+y1) - sig(C,txC,(y0+y1)*G) - y1\nto create adaptor_sig(B,txB,y0),\nMuSig combine with sig(A,txB,y0*G),\nspend output
+
+@enduml
