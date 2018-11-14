@@ -13,34 +13,80 @@ participant Dave
         <=> adaptor_sig(j,m,T) = sig(m,T) - sig(i,m,T)
     end note
 
+== Overview ==
+    Alice->Dave : Pays money
+    Dave->Alice : Provides proof of payment
+
+== Offer ==
+    Dave->Alice : z*G
+    note left
+        Dave sends a unique public nonce to Alice to enable the payment
+    end note
+
 == Setup ==
     Alice->Alice : draw y0, y1, y2 at random
     note left
         Alice sets up tuple (L,y,R) for every user with
         left (L) and right (R) lock and where R - L = y*G
     end note
-    Alice->Alice: ..., y0, y0*G
-    Alice->Bob  : y0*G, y1, (y0+y1)*G
-    Alice->Carol: (y0+y1)*G, y2, (y0+y1+y2)*G
-    Alice->Dave : (y0+y1+y2)*G, y0+y1+y2, ...
+    Alice->Alice: (z+y2+y1+y0)*G := (z*G)+(y0+y1+y2)*G
+
+== Alice to Bob ==
+
+    Alice->Bob  : y0, (z+y2+y1+y0)*G
+
+    note over Alice,Bob
+       All the transactions here (txAlice, txBob, txA0..txA2, txB0..txB2)
+       are constructed programmatically by both parties from the state
+       parameters and don't need to be communicated directly.
+    end note
+
+    Alice->Alice: txAlice: update Alice's commitment with new 2-of-2 MuSig output
+    Alice->Alice: txBob: update Bob's commitment with new 2-of-2 MuSig output, with taproot timelock refund to Alice and breach claim
+
+    note over Alice
+       taproot condition can be an OR of:
+          <n> CLTV <A> CHECKSIG
+          <muSig(A,Breach)> CHECKSIG
+       Alice must be able to claim these before sending sig to Bob
+    end note
+
+    Alice->Bob  : sig(A,txBob)
+
+    Alice->Bob  : txB0 (spend txAlice, pay to Bob), sig(A,txB0,breachcode))
+    Alice->Bob  : txB1 (spend txAlice, pay to Bob), sig(A,txB1,(z+y2+y1)*G)
+    Alice->Bob  : txB2 (spend txBob, pay to Bob, reltimelock), sig(A,txB2,(z+y2+y1)*G)
+
+    Bob->Bob    : (z+y2+y1)*G := (z+y2+y1+y0)*G - (y0)*G
+
+    Bob->Alice  : sig(B,txAlice)
+    Bob->Alice  : txA0 (spend txBob, pay to Alice), sig(A,txA0,breachcode))
+    Bob->Alice  : txA1 (spend txBob, pay to Alice, timelocked), sig(B,txA2)
+    Bob->Alice  : txA2 (spend txAlice, pay to Alice, timelocked, reltimelock), sig(B,txB1)
+
+== Bob to Carol ==
+
     note over Bob,Carol
         Invariant
-        User i>0,i<n-1 gives sig(i,tx_i+1,T) to user i+1 only if have
+        User 0<i,i<n-1 gives sig(i,tx_i+1,T) to user i+1 only if have
         sig(i-1,txi,T-yi*G) from user i-1 AND sig(i+1,tx_i+1,T) from user i+1.
         User i = 0 gives sig(0,tx_1,T) to user 1 if have sig(1,tx_1,T) from
         user 1
     end note
 
-== Tx update ==
-Carol->Dave : add MuSig output w. timelocked refund
-Dave->Carol : txD, sig(D,txD,(y0+y1+y2)*G)
-Bob->Carol : add MuSig output w. timelocked refund
-Carol->Bob : txC, sig(C,txC,(y0+y1)*G)
-Alice->Bob : add MuSig output w. timelocked refund
-Bob->Alice : txB, sig(B,txB,y0*G)
-Alice->Bob : sig(A,txB,y0*G)
-Bob->Carol : sig(B,txC,(y0+y1)*G)
-Carol->Dave : sig(C,txD,(y0+y1+y2)*G)
+    Alice->Carol: y1
+    Bob->Carol  : (z+y2+y1)*G
+    Carol->Carol: (z+y2)*G := (z+y2+y1)*G - (y1)*G
+
+    Bob<->Carol : update commitments
+
+== Carol to Dave ==
+
+    Alice->Dave : y2
+    Carol->Dave : (z+y2)*G
+    Dave->Dave  : z*G := (z+y2)*G - (y2)*G
+
+    Carol<->Dave: update commitments
 
 == Settlement ==
 Dave->Dave : create adaptor_sig(D,txD,y0+y1+y2),\nMuSig combine with sig(C,txD,(y0+y1+y2)*G),\nspend output
