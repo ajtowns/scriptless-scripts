@@ -60,9 +60,9 @@ participant Dave
     Bob->Bob    : (z+y2+y1)*G := (z+y2+y1+y0)*G - (y0)*G
 
     Bob->Alice  : sig(B,txAlice)
-    Bob->Alice  : txA0 (spend txBob, pay to Alice), sig(A,txA0,breachcode))
-    Bob->Alice  : txA1 (spend txBob, pay to Alice, timelocked), sig(B,txA2)
-    Bob->Alice  : txA2 (spend txAlice, pay to Alice, timelocked, reltimelock), sig(B,txB1)
+    Bob->Alice  : txA0 (spend txBob, pay to Alice), sig(B,txA0,breachcode))
+    Bob->Alice  : txA1 (spend txBob, pay to Alice, timelocked), sig(B,txA1)
+    Bob->Alice  : txA2 (spend txAlice, pay to Alice, timelocked, reltimelock), sig(B,txA2)
 
 == Bob to Carol ==
 
