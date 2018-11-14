@@ -89,8 +89,21 @@ participant Dave
     Carol<->Dave: update commitments
 
 == Settlement ==
-Dave->Dave : create adaptor_sig(D,txD,y0+y1+y2),\nMuSig combine with sig(C,txD,(y0+y1+y2)*G),\nspend output
-Carol->Carol : compute y0+y1 = adaptor_sig(D,txD,y0+y1+y2) - sig(D,txD,(y0+y1+y2)*G) - y2\nto create adaptor_sig(C,txC,y0+y1),\nMuSig combine with sig(B,txC,(y0+y1)*G),\nspend output
-Bob->Bob : compute y0 = adaptor_sig(C,txC,y0+y1) - sig(C,txC,(y0+y1)*G) - y1\nto create adaptor_sig(B,txB,y0),\nMuSig combine with sig(A,txB,y0*G),\nspend output
+
+    Dave->Dave  : calculate (z)+(y2)
+    Dave->Carol : reveal z+y2
+
+    Carol->Carol: calculate (z+y2)+(y1)
+    Carol->Bob  : reveal (z+y2+y1)
+
+    Bob->Bob    : calculate (z+y2+y1)+(y0)
+    Bob->Alice  : reveal (z+y2+y1+y0)
+
+    Alice->Alice: z := (z+y2+y1+y0)-(y2)-(y1)-(y0)
+
+    note over Bob,Carol
+      Revealing the secret is either done directly over p2p messaging,
+      or by completing the adaptor signature (for txB1 or txB2, eg).
+    end note
 
 @enduml
