@@ -37,7 +37,7 @@ participant Dave
        txFunding is the funding transaction, spendable by muSig(A,B).
 
        txCommit(i) is the ith commitment transaction, has one input/one
-       output, and can spend either txFunding or txState(j) provided
+       output, and can spend either txFunding or txCommit(j) provided
        j<i. It's output is a taproot of P="muSig(A,B)" or 
        S="<T+i+1> OP_CLTV DROP <muSig(A,B)> CHECKSIG". It has nLockTime
        set to <T+i>.
