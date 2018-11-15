@@ -1,0 +1,123 @@
+@startuml
+title Multi-Hop-Locks with Schnorr
+participant Alice
+participant Bob
+participant Carol
+participant Dave
+
+    note over Bob,Carol
+        Definitions
+        Incomplete 2-of-2 MuSig from user i over m: sig(i,m,T) := k + H(R+T,m)*xi
+        adaptor_sig(i,m,T) := sig(i,m,t*G) + t
+        Combine incomplete signatures from i and j combine: sig(m,T) = sig(i,m,T) + adaptor_sig(j,m,T)
+        <=> adaptor_sig(j,m,T) = sig(m,T) - sig(i,m,T)
+    end note
+
+== Overview ==
+    Alice->Dave : Pays money
+    Dave->Alice : Provides proof of payment
+
+== Offer ==
+    Dave->Alice : z*G
+    note left
+        Dave sends a unique public nonce to Alice to enable the payment
+    end note
+
+== Setup ==
+    Alice->Alice : draw y0, y1, y2 at random
+    note left
+        Alice sets up tuple (L,y,R) for every user with
+        left (L) and right (R) lock and where R - L = y*G
+    end note
+    Alice->Alice: (z+y2+y1+y0)*G := (z*G)+(y0+y1+y2)*G
+
+== Alice to Bob ==
+
+    note over Alice,Bob
+       txAlice and txBob are commitment transactions held by Alice and Bob
+       (respectively), spending the funding transaction, with outputs for
+       the channel balances and each active HTLC. These are constructed
+       programmatically from the channel state, so don't need to be communicated
+       to be known by both parties.
+
+       HTLC's and Bob's balance in txAlice are spendable by muSig(A,
+       R(B,i)) -- the muSig combination of Alice's key, and B's i'th
+       revocation key, Alice's balance in txBob is spendable directly
+       by A. txBob is similar, with Alice and Bob reversed.
+
+       For an HTLC paying Bob, we define four possible spending transactions:
+         txB1 (spend txAlice, pay to Bob)
+         txB2 (spend txBob, pay to Bob, reltimelock)
+         txA1 (spend txBob, pay to Alice, timelocked)
+         txA2 (spend txAlice, pay to Alice, timelocked, reltimelock)
+    end note
+
+    Alice->Alice: txAlice: update Alice's commitment with new 2-of-2 MuSig output
+    Alice->Alice: txBob: update Bob's commitment with new 2-of-2 MuSig output
+
+    Alice->Bob  : y0, (z+y2+y1+y0)*G
+    Alice->Bob  : sig(R(A,i),txB1,(z+y2+y1)*G, SIGHASH_SINGLE)
+    Alice->Bob  : sig(R(A,i),txB2,(z+y2+y1)*G, SIGHASH_SINGLE)
+
+    Bob->Bob    : (z+y2+y1)*G := (z+y2+y1+y0)*G - (y0)*G
+
+    Bob->Alice  : sig(B,txAlice)
+    Bob->Alice  : sig(R(B,i),txA1, SIGHASH_SINGLE)
+    Bob->Alice  : sig(R(B,i),txA2, SIGHASH_SINGLE)
+
+    Alice->Bob  : sig(A,txBob)
+
+    note over Alice,Bob
+       If HTLC's in txBob were also spendable via taproot scripts, eg
+          A CHECKSIGVERIFY n OP_CLTV
+          A CHECKSIGVERIFY ECMUL hash ECEQUAL
+       (depending on whether the HTLC was to Bob or to Alice respectively)
+       then Alice could immediately send a signature of txBob through when
+       proposing a new state. But without this ability, Alice needs
+       to receive partial signature from Bob allowing her to claim the
+       HTLCs before signing the new state.
+    end note
+
+== Bob to Carol ==
+
+    note over Bob,Carol
+        Invariant
+        User 0<i,i<n-1 gives sig(i,tx_i+1,T) to user i+1 only if have
+        sig(i-1,txi,T-yi*G) from user i-1 AND sig(i+1,tx_i+1,T) from user i+1.
+        User i = 0 gives sig(0,tx_1,T) to user 1 if have sig(1,tx_1,T) from
+        user 1
+    end note
+
+    Alice->Carol: y1
+    Bob->Carol  : (z+y2+y1)*G
+    Carol->Carol: (z+y2)*G := (z+y2+y1)*G - (y1)*G
+
+    Bob<->Carol : update commitments
+
+== Carol to Dave ==
+
+    Alice->Dave : y2
+    Carol->Dave : (z+y2)*G
+    Dave->Dave  : z*G := (z+y2)*G - (y2)*G
+
+    Carol<->Dave: update commitments
+
+== Settlement ==
+
+    Dave->Dave  : calculate (z)+(y2)
+    Dave->Carol : reveal z+y2
+
+    Carol->Carol: calculate (z+y2)+(y1)
+    Carol->Bob  : reveal (z+y2+y1)
+
+    Bob->Bob    : calculate (z+y2+y1)+(y0)
+    Bob->Alice  : reveal (z+y2+y1+y0)
+
+    Alice->Alice: z := (z+y2+y1+y0)-(y2)-(y1)-(y0)
+
+    note over Bob,Carol
+      Revealing the secret is either done directly over p2p messaging,
+      or by completing the adaptor signature (for txB1 or txB2, eg).
+    end note
+
+@enduml
