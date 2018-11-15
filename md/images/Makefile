@@ -1,7 +1,4 @@
-all: multi-hop-locks.png multi-hop-locks-penalty.png
+all: multi-hop-locks-eltoo.png multi-hop-locks-penalty.png
 
-multi-hop-locks.png: multi-hop-locks.txt
-	plantuml -pipe <$< >$@
-
-multi-hop-locks-penalty.png: multi-hop-locks-penalty.txt
+%.png: %.txt
 	plantuml -pipe <$< >$@

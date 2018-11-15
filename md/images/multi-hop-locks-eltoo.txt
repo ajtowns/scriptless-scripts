@@ -1,5 +1,5 @@
 @startuml
-title Multi-Hop-Locks with Schnorr
+title Multi-Hop-Locks with Schnorr (eltoo)
 participant Alice
 participant Bob
 participant Carol
@@ -34,49 +34,35 @@ participant Dave
 == Alice to Bob ==
 
     note over Alice,Bob
-       txAlice and txBob are commitment transactions held by Alice and Bob
-       (respectively), spending the funding transaction, with outputs for
-       the channel balances and each active HTLC. These are constructed
-       programmatically from the channel state, so don't need to be communicated
-       to be known by both parties.
+       txFunding is the funding transaction, spendable by muSig(A,B).
 
-       HTLC's and Bob's balance in txAlice are spendable by muSig(A,
-       R(B,i)) -- the muSig combination of Alice's key, and B's i'th
-       revocation key, Alice's balance in txBob is spendable directly
-       by A. txBob is similar, with Alice and Bob reversed.
+       txCommit(i) is the ith commitment transaction, has one input/one
+       output, and can spend either txFunding or txState(j) provided
+       j<i. It's output is a taproot of P="muSig(A,B)" or 
+       S="<T+i+1> OP_CLTV DROP <muSig(A,B)> CHECKSIG". It has nLockTime
+       set to <T+i>.
 
-       For an HTLC paying Bob, we define four possible spending transactions:
-         txB1 (spend txAlice, pay to Bob)
-         txB2 (spend txBob, pay to Bob, reltimelock)
-         txA1 (spend txBob, pay to Alice, timelocked)
-         txA2 (spend txAlice, pay to Alice, timelocked, reltimelock)
+       txSettle(i) the the ith settlement transaction, has one input
+       (spending txCommit(i)) and outputs for each party's balance and
+       any active HTLCs.  It can only spend txCommit(i) after a delay,
+       to allow a higher commitment transaction to be published first.
     end note
-
-    Alice->Alice: txAlice: update Alice's commitment with new 2-of-2 MuSig output
-    Alice->Alice: txBob: update Bob's commitment with new 2-of-2 MuSig output
 
     Alice->Bob  : y0, (z+y2+y1+y0)*G
-    Alice->Bob  : sig(R(A,i),txB1,(z+y2+y1)*G, SIGHASH_SINGLE)
-    Alice->Bob  : sig(R(A,i),txB2,(z+y2+y1)*G, SIGHASH_SINGLE)
-
     Bob->Bob    : (z+y2+y1)*G := (z+y2+y1+y0)*G - (y0)*G
 
-    Bob->Alice  : sig(B,txAlice)
-    Bob->Alice  : sig(R(B,i),txA1, SIGHASH_SINGLE)
-    Bob->Alice  : sig(R(B,i),txA2, SIGHASH_SINGLE)
+    Alice->Bob  : sig(A, txSettle(i), reltimelock)
+    Alice->Bob  : for each HTLC to Bob, sig(A, txHTLC(n) to Bob, preimage(n), SIGHASH_SINGLE)
+    Alice->Bob  : for each HTLC to Alice, sig(A, txHTLC(n) to Bob, timelock=cltv(n), SIGHASH_SINGLE)
 
-    Alice->Bob  : sig(A,txBob)
+    Bob->Alice  : sig(B, txCommit(i)/txFunding, SIGHASH_SINGLE)
+    Bob->Alice  : sig(B, taproot/txCommit(i), SIGHASH_SINGLE+NOINPUT)
+    Bob->Alice  : sig(B, txSettle(i), reltimelock)
+    Bob->Alice  : for each HTLC to Alice, sig(B, txHTLC(n) to Alice, preimage(n), SIGHASH_SINGLE)
+    Bob->Alice  : for each HTLC to Bob, sig(B, txHTLC(n) to Alice, timelock=cltv(n), SIGHASH_SINGLE)
 
-    note over Alice,Bob
-       If HTLC's in txBob were also spendable via taproot scripts, eg
-          A CHECKSIGVERIFY n OP_CLTV
-          A CHECKSIGVERIFY ECMUL hash ECEQUAL
-       (depending on whether the HTLC was to Bob or to Alice respectively)
-       then Alice could immediately send a signature of txBob through when
-       proposing a new state. But without this ability, Alice needs
-       to receive partial signature from Bob allowing her to claim the
-       HTLCs before signing the new state.
-    end note
+    Alice->Bob  : sig(A, txCommit(i)/txFunding, SIGHASH_SINGLE)
+    Alice->Bob  : sig(A, taproot/txCommit(i), SIGHASH_SINGLE+NOINPUT)
 
 == Bob to Carol ==
 
@@ -117,7 +103,7 @@ participant Dave
 
     note over Bob,Carol
       Revealing the secret is either done directly over p2p messaging,
-      or by completing the adaptor signature (for txB1 or txB2, eg).
+      or by completing the adaptor signature for the HTLC.
     end note
 
 @enduml
